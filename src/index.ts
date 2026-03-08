@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { loadConfig, loadRuleFiles } from './config.js';
-import { PipelineEngine } from './pipeline/engine.js';
-import { PipelineContext } from './pipeline/types.js';
-import { setupNode } from './pipeline/nodes/setup.js';
-import { implementNode } from './pipeline/nodes/implement.js';
-import { lintNode } from './pipeline/nodes/lint.js';
-import { testNode } from './pipeline/nodes/test.js';
-import { autofixNode } from './pipeline/nodes/autofix.js';
-import { prNode } from './pipeline/nodes/pr.js';
-import { McpManager } from './mcp/client.js';
-import { getRepoRoot, cleanupWorktree } from './utils/git.js';
+import { loadConfig } from './config.js';
+import { runPipeline } from './run.js';
+import { fetchLabeledIssues, removeLabel, addLabel, commentOnIssue, buildTaskFromIssue } from './watch.js';
+import { getRepoRoot } from './utils/git.js';
 import { logger, setLogLevel } from './utils/logger.js';
 
 const program = new Command();
@@ -19,24 +12,26 @@ const program = new Command();
 program
   .name('minions')
   .description('Personal unattended coding agent — autonomously writes code, runs tests, and opens PRs')
-  .version('0.1.0')
+  .version('0.1.0');
+
+// --- Direct run command (default) ---
+program
+  .command('run', { isDefault: true })
   .argument('<task>', 'Task description — what should the minion do?')
   .option('-m, --model <model>', 'Claude model to use')
   .option('-c, --config <path>', 'Path to minions.yaml config file')
-  .option('--dry-run', 'Plan and implement but skip commit/push/PR', false)
   .option('-b, --backend <backend>', 'Agent backend: "cli" (Claude Code) or "api" (API key)', 'cli')
+  .option('--dry-run', 'Plan and implement but skip commit/push/PR', false)
   .option('--verbose', 'Enable debug logging', false)
   .action(async (task: string, opts: { model?: string; config?: string; backend: string; dryRun: boolean; verbose: boolean }) => {
     if (opts.verbose) setLogLevel('debug');
 
     logger.info('minions', `Starting task: ${task}`);
 
-    // Load config
     const config = await loadConfig(opts.config);
     if (opts.model) config.model = opts.model;
     if (opts.backend === 'cli' || opts.backend === 'api') config.backend = opts.backend;
 
-    // Find repo root
     let repoRoot: string;
     try {
       repoRoot = await getRepoRoot();
@@ -45,70 +40,109 @@ program
       process.exit(1);
     }
 
-    // Load rule files
-    const ruleContent = await loadRuleFiles(repoRoot, config.rule_files);
+    const result = await runPipeline({ task, config, repoRoot, dryRun: opts.dryRun });
 
-    // Connect MCP servers
-    const mcpManager = new McpManager();
-    const mcpTools = await mcpManager.connect(config.mcp_servers);
-    if (mcpTools.length > 0) {
-      logger.info('minions', `Loaded ${mcpTools.length} MCP tools`);
+    console.log('\n--- Results ---');
+    for (const line of result.summary) {
+      console.log(line);
     }
 
-    // Build pipeline
-    const engine = new PipelineEngine();
-    engine.addNode(setupNode);
-    engine.addNode(implementNode);
-    engine.addNode(lintNode);
-    engine.addNode(testNode);
-    engine.addNode(autofixNode);
-    engine.addNode(prNode);
+    process.exit(result.success ? 0 : 1);
+  });
 
-    // Build context
-    const ctx: PipelineContext = {
-      config,
-      repoRoot,
-      worktreePath: '', // Set by setup node
-      branch: '',       // Set by setup node
-      task,
-      ruleContent,
-      dryRun: opts.dryRun,
-      autofixRound: 0,
-      lastFailure: null,
+// --- Watch command ---
+program
+  .command('watch')
+  .description('Poll GitHub issues for a label and auto-implement them')
+  .option('-l, --label <label>', 'GitHub issue label to watch for', 'minion')
+  .option('-i, --interval <seconds>', 'Poll interval in seconds', '30')
+  .option('-m, --model <model>', 'Claude model to use')
+  .option('-c, --config <path>', 'Path to minions.yaml config file')
+  .option('-b, --backend <backend>', 'Agent backend: "cli" or "api"', 'cli')
+  .option('--verbose', 'Enable debug logging', false)
+  .action(async (opts: { label: string; interval: string; model?: string; config?: string; backend: string; verbose: boolean }) => {
+    if (opts.verbose) setLogLevel('debug');
+
+    const config = await loadConfig(opts.config);
+    if (opts.model) config.model = opts.model;
+    if (opts.backend === 'cli' || opts.backend === 'api') config.backend = opts.backend;
+
+    let repoRoot: string;
+    try {
+      repoRoot = await getRepoRoot();
+    } catch {
+      logger.error('minions', 'Not in a git repository.');
+      process.exit(1);
+    }
+
+    const intervalMs = parseInt(opts.interval, 10) * 1000;
+    const label = opts.label;
+    const inProgressLabel = `${label}-in-progress`;
+    const processed = new Set<number>();
+
+    logger.info('watch', `Watching for issues labeled "${label}" every ${opts.interval}s`);
+    logger.info('watch', 'Press Ctrl+C to stop');
+
+    const poll = async () => {
+      const issues = await fetchLabeledIssues(label, repoRoot);
+      const pending = issues.filter(i => !processed.has(i.number));
+
+      if (pending.length === 0) {
+        logger.debug('watch', 'No new issues');
+        return;
+      }
+
+      for (const issue of pending) {
+        processed.add(issue.number);
+        logger.info('watch', `Picking up issue #${issue.number}: ${issue.title}`);
+
+        // Swap labels: remove trigger, add in-progress
+        await removeLabel(issue.number, label, repoRoot);
+        await addLabel(issue.number, inProgressLabel, repoRoot);
+        await commentOnIssue(issue.number, '🤖 Minion picked this up. Working on it...', repoRoot);
+
+        const task = buildTaskFromIssue(issue);
+
+        try {
+          const result = await runPipeline({ task, config, repoRoot, dryRun: false });
+          const summaryText = result.summary.join('\n');
+
+          if (result.success) {
+            await commentOnIssue(issue.number,
+              `✅ Minion completed this task. PR opened.\n\n\`\`\`\n${summaryText}\n\`\`\``,
+              repoRoot,
+            );
+          } else {
+            await commentOnIssue(issue.number,
+              `❌ Minion failed on this task.\n\n\`\`\`\n${summaryText}\n\`\`\``,
+              repoRoot,
+            );
+          }
+        } catch (err: any) {
+          logger.error('watch', `Pipeline error on issue #${issue.number}: ${err.message}`);
+          await commentOnIssue(issue.number,
+            `❌ Minion crashed: ${err.message}`,
+            repoRoot,
+          );
+        }
+
+        // Remove in-progress label
+        await removeLabel(issue.number, inProgressLabel, repoRoot);
+      }
     };
 
-    // Run pipeline
-    try {
-      const result = await engine.run(ctx);
+    // Initial poll
+    await poll();
 
-      if (result.success) {
-        logger.info('minions', 'Pipeline completed successfully');
-      } else {
-        logger.error('minions', 'Pipeline failed');
-        const lastResult = result.results[result.results.length - 1];
-        if (lastResult) {
-          logger.error('minions', `Failed at node: ${lastResult.node}`);
-          logger.error('minions', lastResult.result.output.slice(0, 500));
-        }
-      }
+    // Loop
+    const timer = setInterval(poll, intervalMs);
 
-      // Print summary
-      console.log('\n--- Results ---');
-      for (const { node, result: r } of result.results) {
-        const status = r.success ? '✓' : '✗';
-        console.log(`${status} ${node}: ${r.output.split('\n')[0]}`);
-      }
-    } finally {
-      // Cleanup
-      await mcpManager.disconnect();
-      if (ctx.worktreePath && !opts.dryRun) {
-        try {
-          await cleanupWorktree(repoRoot, ctx.worktreePath);
-        } catch {
-          logger.warn('minions', 'Failed to cleanup worktree (may need manual cleanup)');
-        }
-      }
-    }
+    // Graceful shutdown
+    process.on('SIGINT', () => {
+      logger.info('watch', 'Shutting down...');
+      clearInterval(timer);
+      process.exit(0);
+    });
   });
 
 program.parse();
