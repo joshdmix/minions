@@ -112,6 +112,13 @@ describe('lintNode', () => {
     expect(result.success).toBe(true);
     expect(result.next).toBe('pr');
   });
+
+  it('sets lastFailureSource to lint on failure', async () => {
+    mockShellExec.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'lint error' });
+    const ctx = makeContext({ config: { ...makeContext().config, lint: 'eslint .' } });
+    await lintNode.run(ctx);
+    expect(ctx.lastFailureSource).toBe('lint');
+  });
 });
 
 describe('testNode', () => {
@@ -148,6 +155,13 @@ describe('testNode', () => {
     expect(result.success).toBe(true);
     expect(result.next).toBe('pr');
   });
+
+  it('sets lastFailureSource to test on failure', async () => {
+    mockShellExec.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'test fail' });
+    const ctx = makeContext({ config: { ...makeContext().config, test: 'npm test' } });
+    await testNode.run(ctx);
+    expect(ctx.lastFailureSource).toBe('test');
+  });
 });
 
 describe('prNode', () => {
@@ -177,6 +191,14 @@ describe('prNode', () => {
     const result = await prNode.run(ctx);
     expect(result.success).toBe(true);
     expect(result.output).toContain('PR creation failed');
+  });
+
+  it('fails when no changes were made', async () => {
+    mockShell.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+    const ctx = makeContext();
+    const result = await prNode.run(ctx);
+    expect(result.success).toBe(false);
+    expect(result.output).toContain('No changes');
   });
 
   it('truncates long task titles', async () => {
@@ -281,5 +303,16 @@ describe('autofixNode', () => {
     const ctx = makeContext({ lastFailure: 'error' });
     const result = await autofixNode.run(ctx);
     expect(result.next).toBe('pr');
+  });
+
+  it('returns to test when lastFailureSource is test and lint is configured', async () => {
+    mockRunAgentCli.mockResolvedValue('fixed');
+    const ctx = makeContext({
+      config: { ...makeContext().config, lint: 'eslint .', test: 'npm test' },
+      lastFailure: 'test error',
+      lastFailureSource: 'test',
+    });
+    const result = await autofixNode.run(ctx);
+    expect(result.next).toBe('test');
   });
 });

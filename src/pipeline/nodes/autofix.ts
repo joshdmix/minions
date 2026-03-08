@@ -18,12 +18,18 @@ export const autofixNode: PipelineNode = {
     const task = `Fix the following failure (attempt ${ctx.autofixRound}/${ctx.config.max_autofix_rounds}):\n\n${ctx.lastFailure}`;
 
     const run = ctx.config.backend === 'cli' ? runAgentCli : runAgent;
-    const output = await run({
-      model: ctx.config.model,
-      systemPrompt,
-      task,
-      cwd: ctx.worktreePath,
-    });
+    let output: string;
+    try {
+      output = await run({
+        model: ctx.config.model,
+        systemPrompt,
+        task,
+        cwd: ctx.worktreePath,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, output: message, next: null };
+    }
 
     // Go back to the stage that failed
     const next = ctx.lastFailureSource === 'test'

@@ -57,6 +57,12 @@ describe('read_file', () => {
     const result = await tool.execute({ path: 'nonexistent.txt' }, tmpDir);
     expect(result).toContain('Error reading file');
   });
+
+  it('rejects path traversal', async () => {
+    const tool = getTool('read_file');
+    const result = await tool.execute({ path: '../../etc/passwd' }, tmpDir);
+    expect(result).toContain('Error: path escapes working directory');
+  });
 });
 
 describe('write_file', () => {
@@ -73,6 +79,12 @@ describe('write_file', () => {
     await tool.execute({ path: 'deep/nested/file.txt', content: 'nested' }, tmpDir);
     const content = await fs.readFile(path.join(tmpDir, 'deep/nested/file.txt'), 'utf-8');
     expect(content).toBe('nested');
+  });
+
+  it('rejects path traversal', async () => {
+    const tool = getTool('write_file');
+    const result = await tool.execute({ path: '../outside.txt', content: 'evil' }, tmpDir);
+    expect(result).toContain('Error: path escapes working directory');
   });
 });
 
@@ -91,6 +103,12 @@ describe('list_files', () => {
     const tool = getTool('list_files');
     const result = await tool.execute({ path: '.' }, tmpDir);
     expect(result).toContain('subdir/');
+  });
+
+  it('rejects path traversal', async () => {
+    const tool = getTool('list_files');
+    const result = await tool.execute({ path: '../../' }, tmpDir);
+    expect(result).toContain('Error: path escapes working directory');
   });
 });
 

@@ -75,6 +75,9 @@ export const builtinTools: ToolDefinition[] = [
     },
     execute: async (input, cwd) => {
       const dirPath = path.resolve(cwd, input.path as string);
+      if (!dirPath.startsWith(cwd + path.sep) && dirPath !== cwd) {
+        return 'Error: path escapes working directory';
+      }
       try {
         if (input.recursive) {
           const result = await shellExec(`find . -type f -not -path '*/node_modules/*' -not -path '*/.git/*' | head -200`, { cwd: dirPath });
@@ -104,7 +107,7 @@ export const builtinTools: ToolDefinition[] = [
     execute: async (input, cwd) => {
       const searchPath = input.path as string || '.';
       const safeInclude = ((input.include as string) || '*').replace(/'/g, "'\\''");
-      let cmd = `grep -rn --include='${safeInclude}' '${(input.pattern as string).replace(/'/g, "'\\''")}' ${searchPath} | head -50`;
+      let cmd = `grep -rn --include='${safeInclude}' '${(input.pattern as string).replace(/'/g, "'\\''")}' '${searchPath.replace(/'/g, "'\\''")}' | head -50`;
       const result = await shellExec(cmd, { cwd });
       return result.stdout || 'No matches found';
     },

@@ -8,19 +8,24 @@ export const implementNode: PipelineNode = {
   async run(ctx: PipelineContext): Promise<NodeResult> {
     const systemPrompt = buildSystemPrompt(ctx);
     const run = ctx.config.backend === 'cli' ? runAgentCli : runAgent;
-    const output = await run({
-      model: ctx.config.model,
-      systemPrompt,
-      task: ctx.task,
-      cwd: ctx.worktreePath,
-    });
+    let output: string;
+    try {
+      output = await run({
+        model: ctx.config.model,
+        systemPrompt,
+        task: ctx.task,
+        cwd: ctx.worktreePath,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, output: message, next: null };
+    }
 
     // Determine next step: lint if configured, else test, else pr
     let next = 'pr';
     if (ctx.config.test) next = 'test';
     if (ctx.config.lint) next = 'lint';
 
-    if (output.startsWith('Claude CLI failed:')) return { success: false, output, next: null };
     return { success: true, output, next };
   },
 };

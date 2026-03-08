@@ -33,8 +33,7 @@ export async function runAgentCli(options: AgentOptions): Promise<string> {
   if (result.exitCode !== 0) {
     const error = result.stderr.trim();
     logger.error('agent-cli', `Claude CLI exited with code ${result.exitCode}`, { error: error.slice(0, 500) });
-    // Still return whatever output we got — partial work is better than nothing
-    return output || `Claude CLI failed: ${error}`;
+    throw new Error(output || `Claude CLI exited with code ${result.exitCode}: ${error}`);
   }
 
   logger.info('agent-cli', `Claude CLI completed (${output.length} chars output)`);
