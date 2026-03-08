@@ -1,6 +1,7 @@
 # Minions configuration
 # Copy to minions.yaml and customize
 
+backend: cli                 # "cli" = Claude Code (no API key), "api" = Anthropic API
 model: claude-sonnet-4-6    # Claude model to use
 max_autofix_rounds: 2       # Max lint/test fix iterations
 

@@ -1,5 +1,6 @@
 import { PipelineNode, PipelineContext, NodeResult } from '../types.js';
 import { runAgent } from '../../agent/claude.js';
+import { runAgentCli } from '../../agent/claude-cli.js';
 
 export const autofixNode: PipelineNode = {
   name: 'autofix',
@@ -16,7 +17,8 @@ export const autofixNode: PipelineNode = {
 
     const task = `Fix the following failure (attempt ${ctx.autofixRound}/${ctx.config.max_autofix_rounds}):\n\n${ctx.lastFailure}`;
 
-    const output = await runAgent({
+    const run = ctx.config.backend === 'cli' ? runAgentCli : runAgent;
+    const output = await run({
       model: ctx.config.model,
       systemPrompt,
       task,

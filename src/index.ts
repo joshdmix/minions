@@ -24,8 +24,9 @@ program
   .option('-m, --model <model>', 'Claude model to use')
   .option('-c, --config <path>', 'Path to minions.yaml config file')
   .option('--dry-run', 'Plan and implement but skip commit/push/PR', false)
+  .option('-b, --backend <backend>', 'Agent backend: "cli" (Claude Code) or "api" (API key)', 'cli')
   .option('--verbose', 'Enable debug logging', false)
-  .action(async (task: string, opts: { model?: string; config?: string; dryRun: boolean; verbose: boolean }) => {
+  .action(async (task: string, opts: { model?: string; config?: string; backend: string; dryRun: boolean; verbose: boolean }) => {
     if (opts.verbose) setLogLevel('debug');
 
     logger.info('minions', `Starting task: ${task}`);
@@ -33,6 +34,7 @@ program
     // Load config
     const config = await loadConfig(opts.config);
     if (opts.model) config.model = opts.model;
+    if (opts.backend === 'cli' || opts.backend === 'api') config.backend = opts.backend;
 
     // Find repo root
     let repoRoot: string;

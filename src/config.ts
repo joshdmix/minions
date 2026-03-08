@@ -10,7 +10,10 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+export type Backend = 'cli' | 'api';
+
 export interface Config {
+  backend: Backend;
   model: string;
   max_autofix_rounds: number;
   lint: string | null;
@@ -20,6 +23,7 @@ export interface Config {
 }
 
 const DEFAULTS: Config = {
+  backend: 'cli',
   model: 'claude-sonnet-4-6',
   max_autofix_rounds: 2,
   lint: null,
@@ -45,6 +49,7 @@ export async function loadConfig(configPath?: string): Promise<Config> {
   }
 
   return {
+    backend: (raw.backend === 'cli' || raw.backend === 'api') ? raw.backend : DEFAULTS.backend,
     model: typeof raw.model === 'string' ? raw.model : DEFAULTS.model,
     max_autofix_rounds: typeof raw.max_autofix_rounds === 'number' ? raw.max_autofix_rounds : DEFAULTS.max_autofix_rounds,
     lint: typeof raw.lint === 'string' ? raw.lint : DEFAULTS.lint,

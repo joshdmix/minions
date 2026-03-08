@@ -1,12 +1,14 @@
 import { PipelineNode, PipelineContext, NodeResult } from '../types.js';
 import { runAgent } from '../../agent/claude.js';
+import { runAgentCli } from '../../agent/claude-cli.js';
 
 export const implementNode: PipelineNode = {
   name: 'implement',
   type: 'agentic',
   async run(ctx: PipelineContext): Promise<NodeResult> {
     const systemPrompt = buildSystemPrompt(ctx);
-    const output = await runAgent({
+    const run = ctx.config.backend === 'cli' ? runAgentCli : runAgent;
+    const output = await run({
       model: ctx.config.model,
       systemPrompt,
       task: ctx.task,
