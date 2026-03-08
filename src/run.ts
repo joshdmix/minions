@@ -1,6 +1,7 @@
 import { loadConfig, loadRuleFiles, type Config } from './config.js';
 import { PipelineEngine } from './pipeline/engine.js';
 import type { PipelineContext } from './pipeline/types.js';
+import { PipelineEventBus } from './pipeline/events.js';
 import { setupNode } from './pipeline/nodes/setup.js';
 import { implementNode } from './pipeline/nodes/implement.js';
 import { lintNode } from './pipeline/nodes/lint.js';
@@ -16,6 +17,7 @@ export interface RunOptions {
   config: Config;
   repoRoot: string;
   dryRun: boolean;
+  eventBus?: PipelineEventBus;
 }
 
 export interface RunResult {
@@ -38,6 +40,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
 
   // Build pipeline
   const engine = new PipelineEngine();
+  if (options.eventBus) engine.setEventBus(options.eventBus);
   engine.addNode(setupNode);
   engine.addNode(implementNode);
   engine.addNode(lintNode);

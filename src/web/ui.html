@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>minions — pipeline dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #e0e0e8;
+    --text-dim: #6e6e80;
+    --accent: #7c6ff5;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --blue: #60a5fa;
+  }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .status-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-waiting { background: #1e1e2e; color: var(--text-dim); }
+  .status-running { background: #1a1a3e; color: var(--blue); border: 1px solid #2a2a5e; }
+  .status-success { background: #0a2a1a; color: var(--green); border: 1px solid #1a4a2a; }
+  .status-failed { background: #2a0a0a; color: var(--red); border: 1px solid #4a1a1a; }
+
+  .task-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+  }
+
+  .task-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .task-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .node.active { border-color: var(--blue); }
+  .node.success { border-color: var(--green); }
+  .node.failed { border-color: var(--red); }
+
+  .node-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .node-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .node.pending .node-icon { background: #1e1e2e; color: var(--text-dim); }
+  .node.active .node-icon { background: #1a1a3e; color: var(--blue); animation: pulse 2s infinite; }
+  .node.success .node-icon { background: #0a2a1a; color: var(--green); }
+  .node.failed .node-icon { background: #2a0a0a; color: var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .node-info { flex: 1; min-width: 0; }
+
+  .node-name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .node-type {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .node-duration {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .node-output {
+    display: none;
+    padding: 0 16px 12px 54px;
+  }
+
+  .node-output.visible { display: block; }
+
+  .node-output pre {
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+
+  .connector {
+    display: flex;
+    justify-content: center;
+    height: 16px;
+  }
+
+  .connector-line {
+    width: 1px;
+    height: 100%;
+    background: var(--border);
+  }
+
+  .connector.done .connector-line { background: var(--green); }
+  .connector.active .connector-line { background: var(--blue); }
+
+  .elapsed {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .elapsed span { color: var(--text); font-weight: 500; }
+
+  .waiting-msg {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .waiting-msg .dot { animation: blink 1.4s infinite; }
+  .waiting-msg .dot:nth-child(2) { animation-delay: 0.2s; }
+  .waiting-msg .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0; } 40% { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>minions</h1>
+    <span id="pipelineStatus" class="status-badge status-waiting">waiting</span>
+  </header>
+
+  <div id="waiting" class="waiting-msg">
+    Waiting for pipeline to start<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+  </div>
+
+  <div id="taskCard" class="task-card" style="display:none">
+    <div class="task-label">Task</div>
+    <div id="taskText" class="task-text"></div>
+  </div>
+
+  <div id="pipeline" class="pipeline" style="display:none"></div>
+  <div id="elapsed" class="elapsed" style="display:none">Elapsed: <span id="elapsedTime">0s</span></div>
+</div>
+
+<script>
+const NODE_ICONS = {
+  setup: '⚙',
+  implement: '🧠',
+  lint: '🔍',
+  test: '🧪',
+  autofix: '🔧',
+  pr: '📦',
+};
+
+const state = {
+  nodes: [],
+  nodeStates: {},   // name -> { status, output, startTime, endTime }
+  pipelineStart: null,
+  pipelineDone: false,
+};
+
+function formatDuration(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+function render() {
+  const pipeline = document.getElementById('pipeline');
+  pipeline.innerHTML = '';
+
+  state.nodes.forEach((name, i) => {
+    if (i > 0) {
+      const prevState = state.nodeStates[state.nodes[i - 1]];
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      if (prevState?.status === 'success') conn.classList.add('done');
+      else if (prevState?.status === 'active') conn.classList.add('active');
+      conn.innerHTML = '<div class="connector-line"></div>';
+      pipeline.appendChild(conn);
+    }
+
+    const ns = state.nodeStates[name] || { status: 'pending' };
+    const node = document.createElement('div');
+    node.className = `node ${ns.status}`;
+    node.id = `node-${name}`;
+
+    let duration = '';
+    if (ns.startTime && ns.endTime) {
+      duration = formatDuration(ns.endTime - ns.startTime);
+    } else if (ns.startTime && ns.status === 'active') {
+      duration = formatDuration(Date.now() - ns.startTime);
+    }
+
+    node.innerHTML = `
+      <div class="node-header" onclick="toggleOutput('${name}')">
+        <div class="node-icon">${NODE_ICONS[name] || '●'}</div>
+        <div class="node-info">
+          <div class="node-name">${name}</div>
+          <div class="node-type">${ns.nodeType || ''}</div>
+        </div>
+        ${duration ? `<div class="node-duration">${duration}</div>` : ''}
+      </div>
+      <div class="node-output" id="output-${name}">
+        <pre>${escapeHtml(ns.output || 'No output yet')}</pre>
+      </div>
+    `;
+    pipeline.appendChild(node);
+  });
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function toggleOutput(name) {
+  const el = document.getElementById(`output-${name}`);
+  if (el) el.classList.toggle('visible');
+}
+
+function updateElapsed() {
+  if (!state.pipelineStart) return;
+  const el = document.getElementById('elapsedTime');
+  if (state.pipelineDone) return;
+  el.textContent = formatDuration(Date.now() - state.pipelineStart);
+}
+
+// SSE connection
+const evtSource = new EventSource('/events');
+
+evtSource.onmessage = (e) => {
+  const event = JSON.parse(e.data);
+
+  switch (event.type) {
+    case 'pipeline:start':
+      state.nodes = event.nodes;
+      state.pipelineStart = Date.now();
+      for (const n of event.nodes) {
+        state.nodeStates[n] = { status: 'pending', output: '', nodeType: '' };
+      }
+      document.getElementById('waiting').style.display = 'none';
+      document.getElementById('taskCard').style.display = 'block';
+      document.getElementById('taskText').textContent = event.task;
+      document.getElementById('pipeline').style.display = 'flex';
+      document.getElementById('elapsed').style.display = 'block';
+      document.getElementById('pipelineStatus').className = 'status-badge status-running';
+      document.getElementById('pipelineStatus').textContent = 'running';
+      render();
+      break;
+
+    case 'node:start': {
+      const ns = state.nodeStates[event.node];
+      if (ns) {
+        ns.status = 'active';
+        ns.nodeType = event.nodeType;
+        ns.startTime = Date.now();
+      }
+      render();
+      break;
+    }
+
+    case 'node:complete': {
+      const ns = state.nodeStates[event.node];
+      if (ns) {
+        ns.status = event.success ? 'success' : 'failed';
+        ns.output = event.output || '';
+        ns.endTime = Date.now();
+      }
+      render();
+      // Auto-expand failed nodes
+      if (!event.success) {
+        const outputEl = document.getElementById(`output-${event.node}`);
+        if (outputEl) outputEl.classList.add('visible');
+      }
+      break;
+    }
+
+    case 'pipeline:complete':
+      state.pipelineDone = true;
+      if (event.success) {
+        document.getElementById('pipelineStatus').className = 'status-badge status-success';
+        document.getElementById('pipelineStatus').textContent = 'success';
+      } else {
+        document.getElementById('pipelineStatus').className = 'status-badge status-failed';
+        document.getElementById('pipelineStatus').textContent = 'failed';
+      }
+      updateElapsed();
+      break;
+  }
+};
+
+evtSource.onerror = () => {
+  if (state.pipelineDone) evtSource.close();
+};
+
+// Update elapsed timer and active node durations
+setInterval(() => {
+  updateElapsed();
+  // Update active node duration display
+  for (const name of state.nodes) {
+    const ns = state.nodeStates[name];
+    if (ns?.status === 'active' && ns.startTime) {
+      const durEl = document.querySelector(`#node-${name} .node-duration`);
+      if (durEl) durEl.textContent = formatDuration(Date.now() - ns.startTime);
+    }
+  }
+}, 1000);
+</script>
+</body>
+</html>
