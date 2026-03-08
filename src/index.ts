@@ -3,6 +3,8 @@
 import { Command } from 'commander';
 import { loadConfig } from './config.js';
 import { runPipeline } from './run.js';
+import { PipelineEventBus } from './pipeline/events.js';
+import { startWebServer } from './web/server.js';
 import { fetchLabeledIssues, removeLabel, addLabel, commentOnIssue, buildTaskFromIssue } from './watch.js';
 import { getRepoRoot } from './utils/git.js';
 import { logger, setLogLevel } from './utils/logger.js';
@@ -163,6 +165,74 @@ program
       clearInterval(timer);
       process.exit(0);
     });
+  });
+
+// --- Web UI command ---
+program
+  .command('web')
+  .description('Run a task with a live web dashboard')
+  .argument('<task>', 'Task description — what should the minion do?')
+  .option('-p, --port <port>', 'Dashboard port', '4040')
+  .option('-m, --model <model>', 'Claude model to use')
+  .option('-c, --config <path>', 'Path to minions.yaml config file')
+  .option('-b, --backend <backend>', 'Agent backend: "cli" or "api"', 'cli')
+  .option('--dry-run', 'Plan and implement but skip commit/push/PR', false)
+  .option('--verbose', 'Enable debug logging', false)
+  .action(async (task: string, opts: { port: string; model?: string; config?: string; backend: string; dryRun: boolean; verbose: boolean }) => {
+    if (opts.verbose) setLogLevel('debug');
+
+    if (!task.trim()) {
+      logger.error('minions', 'Task description cannot be empty');
+      process.exit(1);
+    }
+
+    const config = await loadConfig(opts.config);
+    if (opts.model) config.model = opts.model;
+    if (opts.backend !== 'cli' && opts.backend !== 'api') {
+      logger.warn('minions', `Invalid backend "${opts.backend}", using default "cli"`);
+      config.backend = 'cli';
+    } else {
+      config.backend = opts.backend;
+    }
+
+    let repoRoot: string;
+    try {
+      repoRoot = await getRepoRoot();
+    } catch {
+      logger.error('minions', 'Not in a git repository.');
+      process.exit(1);
+    }
+
+    const port = parseInt(opts.port, 10);
+    if (isNaN(port) || port <= 0 || port > 65535) {
+      logger.error('minions', 'Invalid port number');
+      process.exit(1);
+    }
+
+    // Start event bus + web server
+    const eventBus = new PipelineEventBus();
+    const server = await startWebServer({ port, eventBus });
+
+    console.log(`\n  Dashboard: ${server.url}\n`);
+
+    // Run pipeline with events
+    const result = await runPipeline({ task, config, repoRoot, dryRun: opts.dryRun, eventBus });
+
+    console.log('\n--- Results ---');
+    for (const line of result.summary) {
+      console.log(line);
+    }
+
+    // Keep server alive briefly so the UI can show final state
+    logger.info('web', 'Pipeline done. Dashboard will stay up for 30s (Ctrl+C to exit)');
+
+    const shutdown = () => {
+      server.close();
+      process.exit(result.success ? 0 : 1);
+    };
+
+    setTimeout(shutdown, 30000);
+    process.on('SIGINT', shutdown);
   });
 
 program.parse();
