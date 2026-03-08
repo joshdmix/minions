@@ -1,0 +1,21 @@
+# Minions configuration
+# Copy to minions.yaml and customize
+
+model: claude-sonnet-4-6    # Claude model to use
+max_autofix_rounds: 2       # Max lint/test fix iterations
+
+# Commands for deterministic pipeline steps
+lint: "npm run lint"
+test: "npm run test"
+
+# Optional MCP servers for additional tools
+# mcp_servers:
+#   - name: "docs"
+#     command: "npx"
+#     args: ["@modelcontextprotocol/server-filesystem", "/path/to/docs"]
+
+# Rule files to include in agent context
+# Glob patterns resolved relative to repo root
+rule_files:
+  - "CLAUDE.md"
+  - ".cursor/rules/*.md"

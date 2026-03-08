@@ -1,0 +1,33 @@
+{
+  "name": "minions",
+  "version": "0.1.0",
+  "description": "Personal unattended coding agent — autonomously writes code, runs tests, and opens PRs",
+  "type": "module",
+  "bin": {
+    "minions": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": ["ai", "coding-agent", "automation", "claude"],
+  "author": "Joshua Mix",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "commander": "^13.1.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  }
+}
