@@ -61,7 +61,14 @@ export async function startWebServer(options: WebServerOptions): Promise<{ url: 
     res.end('Not found');
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        reject(new Error(`Port ${port} is already in use. Try --port <other>`));
+      } else {
+        reject(err);
+      }
+    });
     server.listen(port, () => {
       const url = `http://localhost:${port}`;
       logger.info('web', `Dashboard running at ${url}`);
