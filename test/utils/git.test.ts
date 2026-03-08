@@ -43,8 +43,8 @@ describe('slugify', () => {
     expect(result).not.toMatch(/^-|-$/);
   });
 
-  it('returns empty string for empty input', () => {
-    expect(slugify('')).toBe('');
+  it('returns fallback for empty input', () => {
+    expect(slugify('')).toBe('task');
   });
 
   it('passes through already lowercase alphanumeric text', () => {
@@ -56,7 +56,7 @@ describe('slugify', () => {
   });
 
   it('handles all special characters', () => {
-    expect(slugify('@#$%^&*()')).toBe('');
+    expect(slugify('@#$%^&*()')).toBe('task');
   });
 });
 

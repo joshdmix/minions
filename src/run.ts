@@ -56,6 +56,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     dryRun,
     autofixRound: 0,
     lastFailure: null,
+    lastFailureSource: null,
   };
 
   const summary: string[] = [];
@@ -77,7 +78,7 @@ export async function runPipeline(options: RunOptions): Promise<RunResult> {
     return { success: result.success, summary };
   } finally {
     await mcpManager.disconnect();
-    if (ctx.worktreePath && !dryRun) {
+    if (ctx.worktreePath) {
       try {
         await cleanupWorktree(repoRoot, ctx.worktreePath);
       } catch {

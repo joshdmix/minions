@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PipelineContext } from '../../src/pipeline/types.js';
 
 vi.mock('../../src/utils/shell.js', () => ({
+  shell: vi.fn(),
   shellExec: vi.fn(),
 }));
 
@@ -21,7 +22,7 @@ vi.mock('../../src/agent/claude-cli.js', () => ({
   runAgentCli: vi.fn(),
 }));
 
-import { shellExec } from '../../src/utils/shell.js';
+import { shell, shellExec } from '../../src/utils/shell.js';
 import { createWorktree, commitAll, pushBranch, openPR } from '../../src/utils/git.js';
 import { runAgent } from '../../src/agent/claude.js';
 import { runAgentCli } from '../../src/agent/claude-cli.js';
@@ -32,6 +33,7 @@ import { setupNode } from '../../src/pipeline/nodes/setup.js';
 import { implementNode } from '../../src/pipeline/nodes/implement.js';
 import { autofixNode } from '../../src/pipeline/nodes/autofix.js';
 
+const mockShell = vi.mocked(shell);
 const mockShellExec = vi.mocked(shellExec);
 const mockCreateWorktree = vi.mocked(createWorktree);
 const mockCommitAll = vi.mocked(commitAll);
@@ -59,6 +61,7 @@ function makeContext(overrides?: Partial<PipelineContext>): PipelineContext {
     dryRun: false,
     autofixRound: 0,
     lastFailure: null,
+    lastFailureSource: null,
     ...overrides,
   };
 }
@@ -157,6 +160,7 @@ describe('prNode', () => {
   });
 
   it('commits, pushes, and opens PR', async () => {
+    mockShell.mockResolvedValue({ stdout: 'abc1234 some commit\n', stderr: '', exitCode: 0 });
     mockOpenPR.mockResolvedValue('https://github.com/test/pr/1');
     const ctx = makeContext();
     const result = await prNode.run(ctx);
@@ -167,6 +171,7 @@ describe('prNode', () => {
   });
 
   it('still succeeds if PR creation fails', async () => {
+    mockShell.mockResolvedValue({ stdout: 'abc1234 some commit\n', stderr: '', exitCode: 0 });
     mockOpenPR.mockRejectedValue(new Error('gh not found'));
     const ctx = makeContext();
     const result = await prNode.run(ctx);
@@ -175,6 +180,7 @@ describe('prNode', () => {
   });
 
   it('truncates long task titles', async () => {
+    mockShell.mockResolvedValue({ stdout: 'abc1234 some commit\n', stderr: '', exitCode: 0 });
     mockOpenPR.mockResolvedValue('https://github.com/test/pr/1');
     const ctx = makeContext({ task: 'A'.repeat(100) });
     await prNode.run(ctx);
@@ -253,6 +259,7 @@ describe('autofixNode', () => {
     const ctx = makeContext({
       config: { ...makeContext().config, lint: 'eslint .' },
       lastFailure: 'lint error',
+      lastFailureSource: 'lint',
     });
     const result = await autofixNode.run(ctx);
     expect(result.next).toBe('lint');
@@ -263,6 +270,7 @@ describe('autofixNode', () => {
     const ctx = makeContext({
       config: { ...makeContext().config, test: 'npm test' },
       lastFailure: 'test error',
+      lastFailureSource: 'test',
     });
     const result = await autofixNode.run(ctx);
     expect(result.next).toBe('test');

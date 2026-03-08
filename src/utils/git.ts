@@ -14,7 +14,7 @@ export function slugify(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-    .slice(0, 50);
+    .slice(0, 50) || 'task';
 }
 
 export async function createWorktree(repoRoot: string, taskDescription: string): Promise<{ worktreePath: string; branch: string }> {

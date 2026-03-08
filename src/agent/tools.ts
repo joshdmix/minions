@@ -23,6 +23,9 @@ export const builtinTools: ToolDefinition[] = [
     },
     execute: async (input, cwd) => {
       const filePath = path.resolve(cwd, input.path as string);
+      if (!filePath.startsWith(cwd + path.sep) && filePath !== cwd) {
+        return 'Error: path escapes working directory';
+      }
       try {
         return await fs.readFile(filePath, 'utf-8');
       } catch (err: any) {
@@ -45,6 +48,9 @@ export const builtinTools: ToolDefinition[] = [
     },
     execute: async (input, cwd) => {
       const filePath = path.resolve(cwd, input.path as string);
+      if (!filePath.startsWith(cwd + path.sep) && filePath !== cwd) {
+        return 'Error: path escapes working directory';
+      }
       try {
         await fs.mkdir(path.dirname(filePath), { recursive: true });
         await fs.writeFile(filePath, input.content as string);
@@ -97,7 +103,8 @@ export const builtinTools: ToolDefinition[] = [
     },
     execute: async (input, cwd) => {
       const searchPath = input.path as string || '.';
-      let cmd = `grep -rn --include='${input.include || '*'}' '${(input.pattern as string).replace(/'/g, "'\\''")}' ${searchPath} | head -50`;
+      const safeInclude = ((input.include as string) || '*').replace(/'/g, "'\\''");
+      let cmd = `grep -rn --include='${safeInclude}' '${(input.pattern as string).replace(/'/g, "'\\''")}' ${searchPath} | head -50`;
       const result = await shellExec(cmd, { cwd });
       return result.stdout || 'No matches found';
     },

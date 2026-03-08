@@ -12,6 +12,7 @@ export interface PipelineContext {
   dryRun: boolean;
   autofixRound: number;
   lastFailure: string | null;
+  lastFailureSource: 'lint' | 'test' | null;
 }
 
 export interface NodeResult {

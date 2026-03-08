@@ -17,6 +17,7 @@ export const testNode: PipelineNode = {
     }
 
     ctx.lastFailure = `Tests failed:\n${output}`;
+    ctx.lastFailureSource = 'test';
     if (ctx.autofixRound < ctx.config.max_autofix_rounds) {
       return { success: false, output, next: 'autofix' };
     }

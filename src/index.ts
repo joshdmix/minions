@@ -17,6 +17,7 @@ program
 // --- Direct run command (default) ---
 program
   .command('run', { isDefault: true })
+  .description('Run a coding task autonomously')
   .argument('<task>', 'Task description — what should the minion do?')
   .option('-m, --model <model>', 'Claude model to use')
   .option('-c, --config <path>', 'Path to minions.yaml config file')
@@ -26,11 +27,21 @@ program
   .action(async (task: string, opts: { model?: string; config?: string; backend: string; dryRun: boolean; verbose: boolean }) => {
     if (opts.verbose) setLogLevel('debug');
 
+    if (!task.trim()) {
+      logger.error('minions', 'Task description cannot be empty');
+      process.exit(1);
+    }
+
     logger.info('minions', `Starting task: ${task}`);
 
     const config = await loadConfig(opts.config);
     if (opts.model) config.model = opts.model;
-    if (opts.backend === 'cli' || opts.backend === 'api') config.backend = opts.backend;
+    if (opts.backend !== 'cli' && opts.backend !== 'api') {
+      logger.warn('minions', `Invalid backend "${opts.backend}", using default "cli"`);
+      config.backend = 'cli';
+    } else {
+      config.backend = opts.backend;
+    }
 
     let repoRoot: string;
     try {
@@ -65,7 +76,12 @@ program
 
     const config = await loadConfig(opts.config);
     if (opts.model) config.model = opts.model;
-    if (opts.backend === 'cli' || opts.backend === 'api') config.backend = opts.backend;
+    if (opts.backend !== 'cli' && opts.backend !== 'api') {
+      logger.warn('watch', `Invalid backend "${opts.backend}", using default "cli"`);
+      config.backend = 'cli';
+    } else {
+      config.backend = opts.backend;
+    }
 
     let repoRoot: string;
     try {
@@ -76,6 +92,10 @@ program
     }
 
     const intervalMs = parseInt(opts.interval, 10) * 1000;
+    if (isNaN(intervalMs) || intervalMs <= 0) {
+      logger.error('watch', 'Invalid interval');
+      process.exit(1);
+    }
     const label = opts.label;
     const inProgressLabel = `${label}-in-progress`;
     const processed = new Set<number>();

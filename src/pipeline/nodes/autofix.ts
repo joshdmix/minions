@@ -25,8 +25,10 @@ export const autofixNode: PipelineNode = {
       cwd: ctx.worktreePath,
     });
 
-    // Go back to lint to re-check
-    const next = ctx.config.lint ? 'lint' : (ctx.config.test ? 'test' : 'pr');
+    // Go back to the stage that failed
+    const next = ctx.lastFailureSource === 'test'
+      ? 'test'
+      : ctx.config.lint ? 'lint' : (ctx.config.test ? 'test' : 'pr');
     return { success: true, output, next };
   },
 };

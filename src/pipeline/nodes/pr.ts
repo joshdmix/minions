@@ -1,5 +1,6 @@
 import { PipelineNode, PipelineContext, NodeResult } from '../types.js';
 import { commitAll, pushBranch, openPR } from '../../utils/git.js';
+import { shell } from '../../utils/shell.js';
 import { logger } from '../../utils/logger.js';
 
 export const prNode: PipelineNode = {
@@ -13,6 +14,12 @@ export const prNode: PipelineNode = {
 
     // Commit all changes
     await commitAll(ctx.worktreePath, `minion: ${ctx.task.slice(0, 72)}`);
+
+    // Check if there are any new commits ahead of main
+    const log = await shell('git', ['log', 'origin/main..HEAD', '--oneline'], { cwd: ctx.worktreePath });
+    if (!log.stdout.trim()) {
+      return { success: false, output: 'No changes were made — nothing to push', next: null };
+    }
 
     // Push branch
     await pushBranch(ctx.worktreePath, ctx.branch);

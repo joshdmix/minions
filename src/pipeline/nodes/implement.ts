@@ -20,6 +20,7 @@ export const implementNode: PipelineNode = {
     if (ctx.config.test) next = 'test';
     if (ctx.config.lint) next = 'lint';
 
+    if (output.startsWith('Claude CLI failed:')) return { success: false, output, next: null };
     return { success: true, output, next };
   },
 };

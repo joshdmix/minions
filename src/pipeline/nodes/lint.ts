@@ -17,6 +17,7 @@ export const lintNode: PipelineNode = {
     }
 
     ctx.lastFailure = `Lint failed:\n${output}`;
+    ctx.lastFailureSource = 'lint';
     if (ctx.autofixRound < ctx.config.max_autofix_rounds) {
       return { success: false, output, next: 'autofix' };
     }
